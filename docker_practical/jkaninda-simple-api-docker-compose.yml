@@ -1,0 +1,30 @@
+services:
+  simple-api:
+    container_name: simple-api
+    image: jkaninda/simple-api:latest
+    restart: unless-stopped
+    environment:
+      - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_DATA_REDIS_PORT=6379
+      - SPRING_DATA_REDIS_TIMEOUT=60000
+      - SPRING_DATA_REDIS_PASSWORD=password
+      - RUN_DATA_SEED=true
+    ports:
+      - "9000:8080"
+    networks:
+      - web
+  redis:
+    image: redis:alpine
+    container_name: redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass password
+    expose:
+      - 6379
+    volumes:
+      - ./redis:/data
+    networks:
+      - web
+networks:
+  web:
+    external: true
+    name: web

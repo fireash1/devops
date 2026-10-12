@@ -1,0 +1,148 @@
+KUBERNETES HANDS-ON REFERENCE
+Updated: 13 October 2026
+
+============================================================
+1. KEY CONCEPTS
+============================================================
+
+Pod
+- Smallest deployable Kubernetes unit; runs one or more containers.
+
+Deployment
+- Maintains the desired number of Pods.
+- Replaces failed/deleted Pods to maintain the requested replica count.
+
+Service
+- Provides a stable network endpoint to reach matching Pods.
+- It does not create or manage Pods.
+
+Service types
+- ClusterIP: internal cluster access (default).
+- NodePort: exposes a port on a cluster node.
+- LoadBalancer: uses a supported external load balancer.
+
+Port-forward
+- Temporarily forwards a local computer port to a Pod or Service port.
+- Ctrl+C stops port-forwarding only; it does not delete the Kubernetes resources.
+
+============================================================
+2. BASIC COMMANDS
+============================================================
+
+Check cluster:
+    kubectl get nodes
+    kubectl config current-context
+
+List resources:
+    kubectl get pods
+    kubectl get pods -o wide
+    kubectl get deployments
+    kubectl get replicasets
+    kubectl get services
+
+Inspect a Pod:
+    kubectl describe pod POD_NAME
+    kubectl logs POD_NAME
+
+Create Nginx Pod:
+    kubectl run nginx-pod --image=nginx:latest --port=80
+
+Create Deployment with two replicas:
+    kubectl create deployment nginx-deployment --image=nginx:latest --replicas=2
+
+Scale Deployment:
+    kubectl scale deployment nginx-deployment --replicas=3
+
+Scale down to zero (Deployment remains):
+    kubectl scale deployment nginx-deployment --replicas=0
+
+Expose Nginx Deployment as NodePort:
+    kubectl expose deployment nginx-deployment --type=NodePort --port=80
+
+Delete standalone Pod:
+    kubectl delete pod nginx-pod
+
+Delete Deployment and its managed Pods:
+    kubectl delete deployment nginx-deployment
+
+============================================================
+3. SERVICE PORTS
+============================================================
+
+Example:
+    kubectl get services
+
+    NAME               TYPE       CLUSTER-IP    PORT(S)
+    nginx-deployment   NodePort   10.96.70.79   80:31737/TCP
+
+- 10.96.70.79 is the Service's internal ClusterIP.
+- 80 is the Service port.
+- 31737 is the assigned NodePort in this example (your value may differ).
+- Nginx listens on container port 80.
+
+============================================================
+4. PORT-FORWARD
+============================================================
+
+Forward Service port 80 to local port 8081:
+    kubectl port-forward service/nginx-deployment 8081:80
+
+Then open:
+    http://localhost:8081
+
+For the Student API Service:
+    kubectl port-forward service/student-deployment 8082:3000
+
+Then open:
+    http://localhost:8082
+
+Keep the terminal running while using the forwarded connection.
+To run it in a separate Windows CMD window:
+    start "Student Port Forward" cmd /k "kubectl port-forward service/student-deployment 8082:3000"
+
+Ctrl+C stops the forwarding process only.
+
+============================================================
+5. DEPLOYMENT YAML BASICS
+============================================================
+
+Example fields:
+- apiVersion: apps/v1
+- kind: Deployment
+- metadata.name: Deployment name
+- spec.replicas: desired number of Pods
+- selector.matchLabels: selects Pods managed by Deployment
+- template.metadata.labels: Pod labels; must match the selector
+- template.spec.containers: container image and settings
+
+Apply YAML:
+    kubectl apply -f deployment.yml
+
+Update YAML after editing:
+    kubectl apply -f deployment.yml
+
+Commands can also create resources; YAML is useful for repeatable and reusable configuration.
+
+============================================================
+6. TROUBLESHOOTING
+============================================================
+
+Pod not starting:
+    kubectl get pods
+    kubectl describe pod POD_NAME
+    kubectl logs POD_NAME
+
+ImagePullBackOff / ErrImagePull:
+- Check image name and tag.
+- With a kind cluster, a local Docker image may need to be loaded into the cluster or pushed to a registry.
+
+Service not routing:
+    kubectl describe service SERVICE_NAME
+    kubectl get pods --show-labels
+- Verify that the Service selector matches the Pod labels and that Pods are Ready.
+
+Port-forward stops:
+- Normal if Ctrl+C is pressed or the terminal is closed.
+- The Deployment, Pods and Service should continue running.
+
+END

@@ -1,0 +1,387 @@
+# DevOps Lab — Docker Practicals Reference
+
+**Environment:** Windows CMD / PowerShell  
+**Working directory used:** `E:\IV BTECH\IV - I\DEVOPS LAB\Devops Lab internal practise\docker_practical`
+
+This guide records the Docker practicals we covered, including commands, verification steps, and troubleshooting. Use the exact ports and filenames required by your question paper.
+
+---
+
+## 1. Basic Docker checks
+
+Run these before starting a practical:
+
+```cmd
+docker --version
+docker compose version
+docker images
+docker ps
+docker ps -a
+```
+
+- `docker images`: lists local images.
+- `docker ps`: lists running containers.
+- `docker ps -a`: lists running and stopped containers.
+
+## 2. Run Nginx in a container
+
+### Command
+
+```cmd
+docker run -d --name c_1 -p 8080:80 nginx
+```
+
+### What it means
+
+- `-d`: run in the background.
+- `--name c_1`: give the container the name `c_1`.
+- `-p 8080:80`: map host port `8080` to container port `80`.
+- `nginx`: image to run.
+
+### Verify
+
+```cmd
+docker ps
+```
+
+Open `http://localhost:8080` in a browser. The Nginx welcome page should appear.
+
+### Port mapping rule
+
+```text
+-p HOST_PORT:CONTAINER_PORT
+```
+
+Nginx listens on port `80` by default inside its container. Therefore, `-p 8080:80` works with the default image, while `-p 8080:8080` generally does not unless Nginx has been configured to listen on port `8080`.
+
+### Troubleshooting: container name conflict
+
+Error resembles:
+
+```text
+The container name "/c_1" is already in use
+```
+
+Inspect it first:
+
+```cmd
+docker ps -a --filter "name=c_1"
+docker inspect c_1
+```
+
+If the existing container is the one you need, start it:
+
+```cmd
+docker start c_1
+```
+
+If you intentionally want to delete and recreate it, and you are sure it contains nothing you need:
+
+```cmd
+docker rm -f c_1
+docker run -d --name c_1 -p 8080:80 nginx
+```
+
+**Caution:** `docker rm -f` deletes the container. Do not use it blindly.
+
+If port `8080` is already in use, choose another available host port, such as `8081`, while keeping container port `80`:
+
+```cmd
+docker run -d --name c_1 -p 8081:80 nginx
+```
+
+If `c_1` already exists, resolve the name conflict before using that command.
+
+---
+
+## 3. PostgreSQL container
+
+### Command used in the practical
+
+```cmd
+docker run -d --name MyPostgresContainer -e POSTGRES_PASSWORD=abcd1234 -p 8844:5432 postgres:latest
+```
+
+### Explanation
+
+- `--name MyPostgresContainer`: container name.
+- `-e POSTGRES_PASSWORD=abcd1234`: sets the initial password for the PostgreSQL superuser in a newly initialized database.
+- `-d`: detached/background mode.
+- `-p 8844:5432`: host port `8844` maps to PostgreSQL's default container port `5432`.
+- `postgres:latest`: image.
+
+Environment variable syntax must have **no spaces** around the equals sign:
+
+```cmd
+-e POSTGRES_PASSWORD=abcd1234
+```
+
+Not:
+
+```cmd
+-e POSTGRES_PASSWORD = abcd1234
+```
+
+### Verify
+
+```cmd
+docker ps -a --filter "name=MyPostgresContainer"
+docker logs MyPostgresContainer
+```
+
+To connect from the host, use host `localhost`, port `8844`, user `postgres`, and password `abcd1234`—provided the container initialized successfully.
+
+**Note:** Publishing the port is only necessary if a client outside the container needs to connect. PostgreSQL itself listens on port `5432` inside the container. The password environment variable is used when the database is initialized for the first time; changing it on a reused data directory does not automatically reset an existing database password.
+
+### Troubleshooting
+
+- **Name conflict:** inspect with `docker ps -a --filter "name=MyPostgresContainer"`. Start the existing container if appropriate, or remove it only if you intentionally want to discard it.
+- **Host port already allocated:** use a different available host port, e.g. `8845:5432`, if your question allows it.
+- **Container exits:** check `docker logs MyPostgresContainer`.
+- **Environment variable error:** remove spaces around `=`.
+
+---
+
+## 4. Run two Whoami containers and compare their responses
+
+### Pull the image
+
+```cmd
+docker pull traefik/whoami:latest
+```
+
+### Start the containers
+
+Question-paper ports may differ. We tested host ports `8686` and `8687`.
+
+```cmd
+docker run -d --name whoami8686 -p 8686:80 traefik/whoami:latest
+docker run -d --name whoami8787 -p 8687:80 traefik/whoami:latest
+```
+
+If your paper specifically requires `8787` for the second host port, use `-p 8787:80` instead and test `localhost:8787`.
+
+### Test both
+
+```cmd
+curl http://localhost:8686
+curl http://localhost:8687
+```
+
+### What to observe
+
+Each response should include request details such as the hostname, IP addresses, HTTP method, and headers. Different hostnames/container IPs show that separate containers handled the requests.
+
+### Verify
+
+```cmd
+docker ps
+```
+
+Expected mappings for the commands above:
+
+- Host `8686` → container `80`
+- Host `8687` → container `80`
+
+### Troubleshooting
+
+- **Name conflict:** inspect with `docker ps -a --filter "name=whoami8686"` (repeat for the other name). Reuse or remove only after checking.
+- **Connection refused:** confirm the container is running using `docker ps` and inspect logs with `docker logs whoami8686`.
+- **Wrong URL port:** curl the host port you actually published.
+- **Question specifies different ports:** the question-paper ports take precedence; host ports can differ while the container port remains `80`.
+
+---
+
+## 5. Docker Compose — Simple API + Redis
+
+### Important: use the instructor-provided YAML
+
+Save the downloaded file in the working directory, usually as `docker-compose.yml` or `compose.yaml`. The filename must match the one used in the command.
+
+The supplied configuration was:
+
+```yaml
+services:
+  simple-api:
+    container_name: simple-api
+    image: jkaninda/simple-api:latest
+    restart: unless-stopped
+    environment:
+      - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_DATA_REDIS_PORT=6379
+      - SPRING_DATA_REDIS_TIMEOUT=60000
+      - SPRING_DATA_REDIS_PASSWORD=password
+      - RUN_DATA_SEED=true
+    ports:
+      - "9000:8080"
+    networks:
+      - web
+  redis:
+    image: redis:alpine
+    container_name: redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass password
+    expose:
+      - 6379
+    volumes:
+      - ./redis:/data
+    networks:
+      - web
+networks:
+  web:
+    external: true
+    name: web
+```
+
+### Understand the key lines
+
+- `"9000:8080"` maps host port `9000` to API container port `8080`.
+- Redis listens on container port `6379` and requires password `password`.
+- `SPRING_DATA_REDIS_HOST=redis` lets the API find Redis by its Compose service/network name.
+- `RUN_DATA_SEED=true` requests seed data according to the image's configuration.
+- `external: true` means Docker Compose expects the `web` network to exist already.
+- `./redis:/data` stores Redis data in a `redis` folder relative to the Compose file.
+
+### Step 1: go to the directory
+
+```cmd
+cd /d "E:\IV BTECH\IV - I\DEVOPS LAB\Devops Lab internal practise\docker_practical"
+```
+
+### Step 2: check the YAML file is present
+
+```cmd
+dir
+```
+
+If the file has a different name, use that exact name in the `-f` argument.
+
+### Step 3: create the external network if needed
+
+```cmd
+docker network create web
+```
+
+If the output says `network with name web already exists`, that is okay; continue.
+
+### Step 4: start services
+
+If the file is named `docker-compose.yml`:
+
+```cmd
+docker compose -f docker-compose.yml up -d
+```
+
+If it is named `compose.yaml`:
+
+```cmd
+docker compose -f compose.yaml up -d
+```
+
+When using a standard Compose filename in the current directory, `docker compose up -d` also works. The `-f` option is useful when the file has a different name or you want to specify it explicitly.
+
+### Step 5: verify services and logs
+
+```cmd
+docker compose -f docker-compose.yml ps
+docker compose -f docker-compose.yml logs
+```
+
+Replace the filename if needed. Check whether both `simple-api` and `redis` are running.
+
+### Step 6: test endpoints
+
+```cmd
+curl http://localhost:9000/
+curl http://localhost:9000/books
+```
+
+The root and books endpoints should return responses from the API. Exact output depends on the image and seed data.
+
+### Troubleshooting
+
+**Error: `no configuration file provided: not found`**
+
+Compose did not find a recognized file in the current directory. Run:
+
+```cmd
+cd
+dir
+```
+
+Confirm the exact filename and location, then specify it explicitly with `-f`.
+
+**Error: network `web` already exists**
+
+This is not a failure. Continue to `docker compose ... up -d`.
+
+**API is not responding**
+
+```cmd
+docker compose -f docker-compose.yml ps
+docker compose -f docker-compose.yml logs simple-api
+docker compose -f docker-compose.yml logs redis
+```
+
+Confirm that port `9000` is published and the API has finished starting. The application may need time to initialize.
+
+**Redis authentication/connectivity errors**
+
+Check that the API's Redis password (`password`) matches the Redis server's `--requirepass password` setting and that both services share the `web` network.
+
+**Port conflict on 9000**
+
+Check the current containers with `docker ps`. If another service occupies host port `9000`, stop the conflicting service or use another host port only if the practical permits it. If changing the host port to `9001`, use `9001:8080` and curl `http://localhost:9001/`.
+
+### Stop the Compose services
+
+From the directory containing the Compose file:
+
+```cmd
+docker compose -f docker-compose.yml down
+```
+
+This removes the Compose containers and default resources, but normally preserves the bind-mounted `./redis` data folder. Because `web` is an external network, Compose does not remove it. Do not add `-v` unless you intend to remove managed volumes.
+
+---
+
+## 6. Useful Docker commands for revision
+
+```cmd
+docker images
+docker ps
+docker ps -a
+docker pull IMAGE_NAME
+docker logs CONTAINER_NAME
+docker start CONTAINER_NAME
+docker stop CONTAINER_NAME
+docker rm CONTAINER_NAME
+docker inspect CONTAINER_NAME
+docker network ls
+docker network inspect web
+docker compose ps
+docker compose logs
+```
+
+## 7. Quick exam revision
+
+| Task | Key command / concept |
+|---|---|
+| Run Nginx | `docker run -d --name c_1 -p 8080:80 nginx` |
+| Port syntax | `-p HOST:CONTAINER` |
+| PostgreSQL password | `-e POSTGRES_PASSWORD=abcd1234` |
+| PostgreSQL mapping | `-p 8844:5432` |
+| Pull Whoami | `docker pull traefik/whoami:latest` |
+| Test Whoami | `curl http://localhost:8686` |
+| Create network | `docker network create web` |
+| Start Compose | `docker compose -f docker-compose.yml up -d` |
+| Test Simple API | `curl http://localhost:9000/` |
+| Test books endpoint | `curl http://localhost:9000/books` |
+
+## Final reminders
+
+1. Check container names before creating containers again.
+2. Use the host port in browser and `curl` commands.
+3. Use the application's actual listening port as the container port.
+4. Keep the instructor's YAML content unchanged unless the practical requires a correction.
+5. If a command fails, inspect status and logs before deleting containers or networks.
